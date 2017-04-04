@@ -1,0 +1,27 @@
+{
+  "name": "github-issues-crawler",
+  "version": "1.0.0",
+  "description": "Given a user, will crawl through their repositories grabbing all issues and outputting them to a local folder.",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexandervalencia/github-issues-crawler.git"
+  },
+  "keywords": [
+    "github",
+    "issues",
+    "spider",
+    "crawler",
+    "tickets",
+    "problems"
+  ],
+  "author": "Alex Valencia",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/alexandervalencia/github-issues-crawler/issues"
+  },
+  "homepage": "https://github.com/alexandervalencia/github-issues-crawler#readme"
+}
