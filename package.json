@@ -23,8 +23,5 @@
   "bugs": {
     "url": "https://github.com/alexandervalencia/github-issues-crawler/issues"
   },
-  "homepage": "https://github.com/alexandervalencia/github-issues-crawler#readme",
-  "dependencies": {
-    "phantom": "^4.0.2"
-  }
+  "homepage": "https://github.com/alexandervalencia/github-issues-crawler#readme"
 }
