@@ -1,10 +1,10 @@
 {
   "name": "github-issues-crawler",
-  "version": "1.0.0",
-  "description": "Given a user, will crawl through their repositories grabbing all issues and outputting them to a local folder.",
-  "main": "index.js",
+  "version": "0.0.1",
+  "description": "Given a username, GIC will crawl through their repositories grabbing all issues and outputting them to a local folder.",
+  "main": "gic.js",
   "scripts": {
-    "test": "test"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
@@ -23,5 +23,8 @@
   "bugs": {
     "url": "https://github.com/alexandervalencia/github-issues-crawler/issues"
   },
-  "homepage": "https://github.com/alexandervalencia/github-issues-crawler#readme"
+  "homepage": "https://github.com/alexandervalencia/github-issues-crawler#readme",
+  "dependencies": {
+    "phantom": "^4.0.2"
+  }
 }
