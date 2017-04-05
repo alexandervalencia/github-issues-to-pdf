@@ -18,7 +18,7 @@
     "tickets",
     "problems"
   ],
-  "author": "Alex Valencia",
+  "author": "Alex Valencia <alex.valencia@me.com> (http://www.avocadodesigns.net)",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/alexandervalencia/github-issues-crawler/issues"
