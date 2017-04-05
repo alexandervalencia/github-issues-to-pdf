@@ -1,6 +1,6 @@
 {
   "name": "github-issues-crawler",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Given a username, GIC will crawl through their repositories grabbing all issues and outputting them to a local folder.",
   "main": "gic.js",
   "scripts": {
