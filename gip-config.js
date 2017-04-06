@@ -1,7 +1,11 @@
-var issueDate =
-exports.address = function() {
-	return "https://github.com/liferay/alloy-editor/issues/644";
+var user = "liferay",
+	repo = "alloy-editor",
+	issueN = 644,
+	issueDate = Date.now(); // Placeholder for when actual JSON file contains issue date
+
+exports.url = function() {
+	return "https://github.com/" + user + "/" + repo + "/issues/" + issueN;
 }
 exports.output = function() {
-	return "liferay_alloy-editor_"+issueDate+"_issue644.pdf";
+	return user + "_" + repo + "_" + issueDate + "_issue" + issueN +".pdf";
 }

@@ -1,15 +1,10 @@
 "use strict";
 var page = require('webpage').create(),
 	config = require('./gip-config.js'),
-	address = config.address(),
-	output = config.output(),
-	pageHeight,
-	pageWidth,
-	size = config.size();
+	url = config.url(),
+	output = config.output();
 
 page.viewportSize = { width: 600, height: 600 };
-
-size = config.size();
 
 page.paperSize = {
 	format: 'letter',
@@ -17,10 +12,10 @@ page.paperSize = {
 	margin: '1cm'
 };
 
-page.open(address,
+page.open(url,
 	function (status) {
 		if (status !== 'success') {
-			console.log('Unable to load the address!');
+			console.log('Unable to load the URL!');
 
 			phantom.exit(1);
 
