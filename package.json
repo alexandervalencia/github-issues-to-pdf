@@ -1,14 +1,14 @@
 {
-  "name": "github-issues-crawler",
-  "version": "1.0.1",
-  "description": "Given a username, GIC will crawl through their repositories grabbing all issues and outputting them to a local folder.",
-  "main": "gic.js",
+  "name": "github-issues-to-pdf",
+  "version": "1.0.2",
+  "description": "Given a username, GIP will crawl through their repositories grabbing all issues and outputting them to a local folder as PDFs.",
+  "main": "gip.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alexandervalencia/github-issues-crawler.git"
+    "url": "git+https://github.com/alexandervalencia/github-issues-to-pdf.git"
   },
   "keywords": [
     "github",
@@ -16,12 +16,19 @@
     "spider",
     "crawler",
     "tickets",
-    "problems"
+    "problems",
+    "pdf",
+    "export"
   ],
   "author": "Alex Valencia <alex.valencia@me.com> (http://www.avocadodesigns.net)",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/alexandervalencia/github-issues-crawler/issues"
+    "url": "https://github.com/alexandervalencia/github-issues-to-pdf/issues"
   },
-  "homepage": "https://github.com/alexandervalencia/github-issues-crawler#readme"
+  "homepage": "https://github.com/alexandervalencia/github-issues-to-pdf#readme",
+  "dependencies": {
+    "github": "^9.2.0",
+    "phantomjs": "^2.1.7",
+    "readline-sync": "^1.4.7"
+  }
 }
