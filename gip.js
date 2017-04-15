@@ -1,18 +1,17 @@
 var accountName;
 var accountType;
 var allOrUniqueRepos;
-var async = require('async');
 var customHeaders = {'user-agent': 'GitHub-Issues-to-PDF'};
-var fs = require('fs');
 var GitHubApi = require('github');
-var job = {};
-// var page = require('webpage').create();
+var issueDate;
+var issueNum;
+var masterList = {repo: []};
+var phantom = require('phantom');
 var repoName;
 var rls = require('readline-sync');
 
 var github = new GitHubApi(
 	{
-		debug: true,
 		followRedirects: false,
 		headers: customHeaders,
 		host: 'api.github.com',
@@ -21,27 +20,19 @@ var github = new GitHubApi(
 	}
 );
 
-var masterList = {
-	account: {
-		repo: []
-	}
-};
-
 function buildMasterList() {
-	var total = masterList.account.repo.length;
-	var count = 0;
-
-	for (var i = 0; i < total; i++) {
-		(function(err, res) {
-			getIssues(masterList.account.repo[i].name);
-
-			count++;
-			if (count > total - 1) done();
-		}(i));
+	if ((accountType == 0) && (repoName == undefined)) {
+		getAllOrgRepos(null, getAllIssues);
 	}
-
-	function done() {
-		console.log('All data has been loaded');
+	else if ((accountType == 1) && (repoName == undefined)) {
+		getAllUserRepos(null, getAllIssues);
+	}
+	else {
+		getOneRepo(
+			function() {
+				getIssues(repoName, null, null);
+			}
+		);
 	}
 }
 
@@ -53,7 +44,17 @@ function getAllOrUniqueRepos(options) {
 	return rls.keyInSelect(options, 'Do you want issues from all the repositories or a specific one? ');
 }
 
-function getAllOrgRepos(pageCount) {
+function getAllIssues() {
+	function callMe() {
+		getIssues(masterList.repo[i].name, i, null);
+	}
+
+	for (var i = 0; i < masterList.repo.length; i++) {
+		callMe();
+	}
+}
+
+function getAllOrgRepos(pageCount, callback) {
 	if (!pageCount) {
 		pageCount = 1;
 	}
@@ -64,10 +65,8 @@ function getAllOrgRepos(pageCount) {
 		per_page: 100,
 		type: 'public'
 	}, function(err, res) {
-		masterList.account.name = accountName;
-
 		for (var i = 0; i < res.data.length; i++) {
-			masterList.account.repo.push(
+			masterList.repo.push(
 				{name: res.data[i].name}
 			);
 		}
@@ -75,61 +74,91 @@ function getAllOrgRepos(pageCount) {
 		if (github.hasNextPage(res)) {
 			getAllOrgRepos(pageCount + 1);
 		}
+		else {
+			callback();
+		}
 	});
 }
 
-function getIssues(repoName, pageCount) {
+function getAllUserRepos(pageCount, callback) {
 	if (!pageCount) {
 		pageCount = 1;
+	}
+
+	github.repos.getForUser({
+		page: pageCount,
+		per_page: 100,
+		type: 'owner',
+		username: accountName
+	}, function(err, res) {
+		for (var i = 0; i < res.data.length; i++) {
+			masterList.repo.push(
+				{name: res.data[i].name}
+			);
+		}
+
+		if (github.hasNextPage(res)) {
+			getAllOrgRepos(pageCount + 1, callback);
+		}
+		else {
+			callback();
+		}
+	});
+}
+
+function getIssues(curRepoName, repoCount, pageCount) {
+	if (!pageCount) {
+		pageCount = 1;
+	}
+
+	if (!repoCount) {
+		repoCount = 0;
 	}
 
 	github.issues.getForRepo({
 		owner: accountName,
 		page: pageCount,
 		per_page: 100,
-		repo: repoName,
+		repo: curRepoName,
 		// since: '2016-01-01T00:00:01Z',
 		state: 'all'
 	}, function(err, res) {
-		for (var i = 0; i < res.data.length; i++) {
-			masterList.account.repo[i].push(
-				{issue: [{
-					address: res.data[i].url,
-					closedAt: res.data[i].closed_at,
-					createdAt: res.data[i].created_at,
-					num: res.data[i].number
-				}]}
-			);
-		}
+		var tempArray = [];
 
-		fs.writeFileSync(accountName + '_' + repoName + '_' + 'masterList.json', JSON.stringify(masterList), null);
+		for (var i = 0; i < res.data.length; i++) {
+			tempArray.push({
+				address: res.data[i].url,
+				closed: res.data[i].closed_at,
+				created: res.data[i].created_at,
+				num: res.data[i].number
+			});
+		}
+		masterList.repo[repoCount].issue = tempArray;
 
 		if (github.hasNextPage(res)) {
-			getIssues(pageCount + 1);
+			getIssues(curRepoName, repoCount, pageCount + 1);
+		}
+		else {
+			renderMasterList();
 		}
 	});
 }
 
-function generateFileName(accountName, repoName, issueDate, issueNum) {
-	return (accountName + '_' + repoName + '_' + issueDate + '_' + issueNum + '.pdf');
-}
+function getOneRepo(callback) {
+	github.repos.get({
+		owner: accountName,
+		repo: repoName
+	}, function(err, res) {
+		masterList.repo.push({name: res.data.name});
 
-function renderIssuesToPdf(url, output, callback) {
-
-}
-
-function orgOrUser() {
-	if (accountType != 'organization') {
-		return false;
-	}
-
-	return true;
+		callback();
+	});
 }
 
 function initiateGip() {
 	github.authenticate({
-		token: '',
-		type: ''
+		token: '96f9f454d1df3f1faa947312c8ab88f62dd99d57',
+		type: 'token'
 	});
 
 	accountType = getAccountType(['organization', 'user']);
@@ -143,35 +172,43 @@ function initiateGip() {
 	}
 }
 
-async.series([
-	function(callback) {
-		initiateGip();
-		console.log(masterList.account)
-		callback(null);
-	},
-	function(callback) {
-		orgOrUser();
-		callback(null);
-	},
-	function(callback) {
-		getAllOrgRepos();
-		callback(null);
+function phantomRender(repoCount, issueCount) {
+	(async function() {
+		var instance = await phantom.create();
+		var page = await instance.createPage();
 
-	},
-	function(callback) {
-		setTimeout(function() {
-			console.log(masterList.account);
-			getIssues(repoName);
-			callback(null);
-		}, 2000);
-	},
-	function(callback) {
-	setTimeout(function() {
-			console.log(masterList.account);
-			callback(null);
-		}, 10000);
+		await page.property('paperSize', {format: 'letter', margin: '0.5in', orientation: 'portrait'});
+
+		var status = await page.open('https://github.com/' + accountName + '/' + masterList.repo[repoCount].name + '/issues/' + masterList.repo[repoCount].issue[issueCount].num);
+
+		await page.render('./rendered_PDFs/' + accountName + '_' + masterList.repo[repoCount].name + '_' + masterList.repo[repoCount].issue[issueCount].created + '_issue' +masterList.repo[repoCount].issue[issueCount].num + '.pdf');
+
+		console.log('File created at [./rendered_PDFs/' + accountName + '_' + masterList.repo[repoCount].name + '_' + masterList.repo[repoCount].issue[issueCount].created + '_issue' +masterList.repo[repoCount].issue[issueCount].num + '.pdf]');
+
+		await instance.exit();
+	}());
+}
+
+function renderMasterList() {
+	for (var i = 0; i < masterList.repo.length; i++) {
+		for (var j = 0; j < masterList.repo[i].issue.length; j++) {
+			var tempDate = masterList.repo[i].issue[j].created;
+			masterList.repo[i].issue[j].created = tempDate.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm)
+			callMe(i, j);
+		}
 	}
-]);
 
+	function callMe(i, j) {
+		phantomRender(i, j);
+	}
+}
 
-// phantom.exit();
+async function buildAndRender() {
+	await buildMasterList();
+
+	await renderMasterList();
+}
+
+initiateGip();
+
+buildAndRender();

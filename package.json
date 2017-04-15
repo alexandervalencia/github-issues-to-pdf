@@ -27,7 +27,6 @@
   },
   "homepage": "https://github.com/alexandervalencia/github-issues-to-pdf#readme",
   "dependencies": {
-    "async": "^2.3.0",
     "github": "^9.2.0",
     "phantomjs": "^2.1.7",
     "readline-sync": "^1.4.7"
