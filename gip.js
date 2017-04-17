@@ -1,13 +1,6 @@
-var accountName;
-var accountType;
-var allOrUniqueRepos;
 var customHeaders = {'user-agent': 'GitHub-Issues-to-PDF'};
 var GitHubApi = require('github');
-var issueDate;
-var issueNum;
-var masterList = {repo: []};
 var phantom = require('phantom');
-var repoName;
 var rls = require('readline-sync');
 
 var github = new GitHubApi(
@@ -20,22 +13,6 @@ var github = new GitHubApi(
 	}
 );
 
-function buildMasterList() {
-	if ((accountType == 0) && (repoName == undefined)) {
-		getAllOrgRepos(null, getAllIssues);
-	}
-	else if ((accountType == 1) && (repoName == undefined)) {
-		getAllUserRepos(null, getAllIssues);
-	}
-	else {
-		getOneRepo(
-			function() {
-				getIssues(repoName, null, null);
-			}
-		);
-	}
-}
-
 function getAccountType(accountTypes) {
 	return rls.keyInSelect(accountTypes, 'What is the account type you\'re searching for? ');
 }
@@ -45,170 +22,169 @@ function getAllOrUniqueRepos(options) {
 }
 
 function getAllIssues() {
-	function callMe() {
-		getIssues(masterList.repo[i].name, i, null);
+	function createIssueCallback(repo) {
+		return function(issues) {
+			repo.issue = issues
+		}
 	}
 
 	for (var i = 0; i < masterList.repo.length; i++) {
-		callMe();
+		getIssues(accountName, masterList.repo[i].name, createIssueCallback(masterList.repo[i]));
 	}
 }
 
-function getAllOrgRepos(pageCount, callback) {
-	if (!pageCount) {
-		pageCount = 1;
+function getAllOrgRepos(org, callback) {
+	function _getAllOrgRepos() {
+		github.repos.getForOrg({
+			org: org,
+			page: page,
+			per_page: 100,
+			type: 'public'
+		}, function(err, res) {
+			res.data.forEach(function(repo) {
+				collectedRepos.push({ name: repo.name, owner: org })
+			})
+
+			if (github.hasNextPage(res)) {
+				page += 1;
+				_getAllOrgRepos();
+			}
+			else {
+				callback(collectedRepos);
+			}
+		});
 	}
 
-	github.repos.getForOrg({
-		org: accountName,
-		page: pageCount,
-		per_page: 100,
-		type: 'public'
-	}, function(err, res) {
-		for (var i = 0; i < res.data.length; i++) {
-			masterList.repo.push(
-				{name: res.data[i].name}
-			);
-		}
-
-		if (github.hasNextPage(res)) {
-			getAllOrgRepos(pageCount + 1);
-		}
-		else {
-			callback();
-		}
-	});
+	var page = 1;
+	var collectedRepos = [];
+	_getAllOrgRepos()
 }
 
-function getAllUserRepos(pageCount, callback) {
-	if (!pageCount) {
-		pageCount = 1;
+function getAllUserRepos(username, callback) {
+	function _getAllUserRepos() {
+		github.repos.getForUser({
+			page: page,
+			per_page: 100,
+			type: 'owner',
+			username: username
+		}, function(err, res) {
+			res.data.forEach(function(repo) {
+				collectedRepos.push({ name: repo.name, owner: username })
+			})
+
+			if (github.hasNextPage(res)) {
+				page += 1;
+				_getAllUserRepos();
+			}
+			else {
+				callback(collectedRepos);
+			}
+		});
 	}
 
-	github.repos.getForUser({
-		page: pageCount,
-		per_page: 100,
-		type: 'owner',
-		username: accountName
-	}, function(err, res) {
-		for (var i = 0; i < res.data.length; i++) {
-			masterList.repo.push(
-				{name: res.data[i].name}
-			);
-		}
-
-		if (github.hasNextPage(res)) {
-			getAllOrgRepos(pageCount + 1, callback);
-		}
-		else {
-			callback();
-		}
-	});
+	var page = 1;
+	var collectedRepos = [];
+	_getAllUserRepos();
 }
 
-function getIssues(curRepoName, repoCount, pageCount) {
-	if (!pageCount) {
-		pageCount = 1;
-	}
+function getIssues(accountOwner, curRepoName, callback) {
+	function _getIssues() {
+		github.issues.getForRepo({
+			owner: accountOwner,
+			page: page,
+			per_page: 100,
+			repo: curRepoName,
+			// since: '2016-01-01T00:00:01Z',
+			state: 'all'
+		}, function(err, res) {
+			res.data.forEach(function(issue) {
+				collectedIssues.push({
+					address: issue.url,
+					closed: issue.closed_at,
+					created: issue.created_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
+					num: issue.number
+				})
+			})
 
-	if (!repoCount) {
-		repoCount = 0;
-	}
+			if (github.hasNextPage(res)) {
+				page += 1;
+				_getIssues()
+			} else {
+				callback(collectedIssues);
+			}
+		})
+	};
 
-	github.issues.getForRepo({
-		owner: accountName,
-		page: pageCount,
-		per_page: 100,
-		repo: curRepoName,
-		// since: '2016-01-01T00:00:01Z',
-		state: 'all'
-	}, function(err, res) {
-		var tempArray = [];
-
-		for (var i = 0; i < res.data.length; i++) {
-			tempArray.push({
-				address: res.data[i].url,
-				closed: res.data[i].closed_at,
-				created: res.data[i].created_at,
-				num: res.data[i].number
-			});
-		}
-		masterList.repo[repoCount].issue = tempArray;
-
-		if (github.hasNextPage(res)) {
-			getIssues(curRepoName, repoCount, pageCount + 1);
-		}
-		else {
-			renderMasterList();
-		}
-	});
-}
-
-function getOneRepo(callback) {
-	github.repos.get({
-		owner: accountName,
-		repo: repoName
-	}, function(err, res) {
-		masterList.repo.push({name: res.data.name});
-
-		callback();
-	});
+	var page = 1;
+	var collectedIssues = [];
+	_getIssues();
 }
 
 function initiateGip() {
 	github.authenticate({
-		token: '96f9f454d1df3f1faa947312c8ab88f62dd99d57',
+		token: '508e37781e1b852ac0d20df4178a39a8c1b7a7f2',
 		type: 'token'
 	});
 
-	accountType = getAccountType(['organization', 'user']);
+	var repoName;
 
-	accountName = rls.question('Please enter the name of the account you would like to query (required): ');
+	var accountType = getAccountType(['organization', 'user']);
 
-	allOrUniqueRepos = getAllOrUniqueRepos(['all', 'a specific repo']);
+	var accountName = rls.question('Please enter the name of the account you would like to query (required): ');
+
+	var allOrUniqueRepos = getAllOrUniqueRepos(['all', 'a specific repo']);
 
 	if (allOrUniqueRepos === 1) {
 		repoName = rls.question('Please enter the name of the specific repository you want: ');
 	}
+
+	if ((accountType == 0) && (repoName == undefined)) {
+		getAllOrgRepos(accountName, function(orgRepos) {
+			orgRepos.forEach(function(repo) {
+				getIssuesAndRenderRepo(repo)
+			})
+		})
+	}
+	else if ((accountType == 1) && (repoName == undefined)) {
+		getAllUserRepos(accountName, function(userRepos) {
+			userRepos.forEach(function(repo) {
+				getIssuesAndRenderRepo(repo)
+			})
+		})
+	}
+	else {
+		var repo = { name: repoName, owner: accountName  }
+		getIssuesAndRenderRepo(repo)
+	}
 }
 
-function phantomRender(repoCount, issueCount) {
+function getIssuesAndRenderRepo(repo) {
+	getIssues(repo.owner, repo.name, function(issues) {
+		renderRepoIssues(repo, issues)
+	})
+}
+
+function renderRepoIssues(repo, issues) {
+	issues.forEach(function(issue) {
+		phantomRender(repo, issue)
+	})
+}
+
+function phantomRender(repo, issue) {
 	(async function() {
 		var instance = await phantom.create();
 		var page = await instance.createPage();
 
 		await page.property('paperSize', {format: 'letter', margin: '0.5in', orientation: 'portrait'});
 
-		var status = await page.open('https://github.com/' + accountName + '/' + masterList.repo[repoCount].name + '/issues/' + masterList.repo[repoCount].issue[issueCount].num);
+		var status = await page.open('https://github.com/' + repo.owner + '/' + repo.name + '/issues/' + issue.num);
 
-		await page.render('./rendered_PDFs/' + accountName + '_' + masterList.repo[repoCount].name + '_' + masterList.repo[repoCount].issue[issueCount].created + '_issue' +masterList.repo[repoCount].issue[issueCount].num + '.pdf');
+		await page.render('./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf');
 
-		console.log('File created at [./rendered_PDFs/' + accountName + '_' + masterList.repo[repoCount].name + '_' + masterList.repo[repoCount].issue[issueCount].created + '_issue' +masterList.repo[repoCount].issue[issueCount].num + '.pdf]');
+		console.log('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf]');
 
 		await instance.exit();
 	}());
 }
 
-function renderMasterList() {
-	for (var i = 0; i < masterList.repo.length; i++) {
-		for (var j = 0; j < masterList.repo[i].issue.length; j++) {
-			var tempDate = masterList.repo[i].issue[j].created;
-			masterList.repo[i].issue[j].created = tempDate.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm)
-			callMe(i, j);
-		}
-	}
-
-	function callMe(i, j) {
-		phantomRender(i, j);
-	}
-}
-
-async function buildAndRender() {
-	await buildMasterList();
-
-	await renderMasterList();
-}
-
 initiateGip();
-
-buildAndRender();
