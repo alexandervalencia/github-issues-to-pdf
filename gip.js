@@ -1,25 +1,63 @@
-var customHeaders = {'user-agent': 'GitHub-Issues-to-PDF'};
 var GitHubApi = require('github');
+var inq = require('inquirer');
 var phantom = require('phantom');
-var rls = require('readline-sync');
+var inqAnswers = [];
 
 var github = new GitHubApi(
 	{
 		followRedirects: false,
-		headers: customHeaders,
+		headers: {'user-agent': 'GitHub-Issues-to-PDF'},
 		host: 'api.github.com',
 		pathPrefix: '',
 		timeout: 10000
 	}
 );
 
-function getAccountType(accountTypes) {
-	return rls.keyInSelect(accountTypes, 'What is the account type you\'re searching for? ');
-}
-
-function getAllOrUniqueRepos(options) {
-	return rls.keyInSelect(options, 'Do you want issues from all the repositories or a specific one? ');
-}
+var inqPrompt = [
+	{
+		choices: ['organization', 'user'],
+		type: 'list',
+		message: 'What is the account type you\'re searching for?',
+		name: 'accountType'
+	},
+	{
+		filter: function(answer) {
+			return answer.toLowerCase();
+		},
+		message: 'Please enter the name of the account you would like to query (required):',
+		name: 'accountName',
+		type: 'input',
+		validate: function (answer) {
+			if (answer == '') {
+				return 'You must input an account name.';
+			}
+			return true;
+		}
+	},
+	{
+		choices: ['all', 'a specific repository'],
+		type: 'list',
+		message: 'Would you like to get the issues from every repository for the account or a specific one?',
+		name: 'getAllorUniqueRepos'
+	},
+	{
+		filter: function(answer) {
+			return answer.toLowerCase();
+		},
+		message: 'Please enter the name of the specific repository you want:',
+		name: 'repoName',
+		type: 'input',
+		validate: function (answer) {
+			if (answer == '') {
+				return 'You must input a repository name.';
+			}
+			return true;
+		},
+		when: function (answers) {
+			return answers.getAllorUniqueRepos === 'a specific repository';
+		}
+	}
+];
 
 function getAllIssues() {
 	function createIssueCallback(repo) {
@@ -57,6 +95,7 @@ function getAllOrgRepos(org, callback) {
 
 	var page = 1;
 	var collectedRepos = [];
+
 	_getAllOrgRepos()
 }
 
@@ -84,68 +123,71 @@ function getAllUserRepos(username, callback) {
 
 	var page = 1;
 	var collectedRepos = [];
+
 	_getAllUserRepos();
 }
 
 function getIssues(accountOwner, curRepoName, callback) {
 	function _getIssues() {
-		github.issues.getForRepo({
-			owner: accountOwner,
-			page: page,
-			per_page: 100,
-			repo: curRepoName,
-			// since: '2016-01-01T00:00:01Z',
-			state: 'all'
-		}, function(err, res) {
-			res.data.forEach(function(issue) {
-				collectedIssues.push({
-					address: issue.url,
-					closed: issue.closed_at,
-					created: issue.created_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
-					num: issue.number
+		github.issues.getForRepo(
+			{
+				owner: accountOwner,
+				page: page,
+				per_page: 100,
+				repo: curRepoName,
+				// since: '2016-01-01T00:00:01Z',
+				state: 'all'
+			}, function(err, res) {
+				res.data.forEach(function(issue) {
+					collectedIssues.push({
+						closed: issue.closed_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
+						created: issue.created_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
+						num: issue.number
+					})
 				})
-			})
 
-			if (github.hasNextPage(res)) {
-				page += 1;
-				_getIssues()
-			} else {
-				callback(collectedIssues);
+				if (github.hasNextPage(res)) {
+					page += 1;
+					_getIssues()
+				} else {
+					callback(collectedIssues);
+				}
 			}
-		})
+		)
 	};
 
 	var page = 1;
 	var collectedIssues = [];
+
 	_getIssues();
 }
 
 function initiateGip() {
 	github.authenticate({
-		token: '508e37781e1b852ac0d20df4178a39a8c1b7a7f2',
+		token: 'a56f2c337e249b0c9809c1693b9d72effd5bf49d',
 		type: 'token'
 	});
 
+	inq.prompt(inqPrompt).then(
+		function (answers) {
+			inqAnswers.push(answers);
+		}
+	);
+
 	var repoName;
-
 	var accountType = getAccountType(['organization', 'user']);
-
-	var accountName = rls.question('Please enter the name of the account you would like to query (required): ');
-
+	var accountName = getAccountName();
 	var allOrUniqueRepos = getAllOrUniqueRepos(['all', 'a specific repo']);
+	repoName = getRepoName();
 
-	if (allOrUniqueRepos === 1) {
-		repoName = rls.question('Please enter the name of the specific repository you want: ');
-	}
-
-	if ((accountType == 0) && (repoName == undefined)) {
+	if ((accountType === 'organization') && (allOrUniqueRepos === 'all')) {
 		getAllOrgRepos(accountName, function(orgRepos) {
 			orgRepos.forEach(function(repo) {
 				getIssuesAndRenderRepo(repo)
 			})
 		})
 	}
-	else if ((accountType == 1) && (repoName == undefined)) {
+	else if ((accountType === 'user') && (allOrUniqueRepos === 'all') {
 		getAllUserRepos(accountName, function(userRepos) {
 			userRepos.forEach(function(repo) {
 				getIssuesAndRenderRepo(repo)
@@ -153,7 +195,7 @@ function initiateGip() {
 		})
 	}
 	else {
-		var repo = { name: repoName, owner: accountName  }
+		var repo = { name: repoName, owner: accountName }
 		getIssuesAndRenderRepo(repo)
 	}
 }
@@ -166,7 +208,7 @@ function getIssuesAndRenderRepo(repo) {
 
 function renderRepoIssues(repo, issues) {
 	issues.forEach(function(issue) {
-		phantomRender(repo, issue)
+		setTimeout(phantomRender(repo, issue), 1000)
 	})
 }
 
