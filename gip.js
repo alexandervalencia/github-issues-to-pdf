@@ -27,7 +27,7 @@ var inqPrompt = [
 		message: 'Please enter the name of the account you would like to query (required):',
 		name: 'accountName',
 		type: 'input',
-		validate: function (answer) {
+		validate: function(answer) {
 			if (answer == '') {
 				return 'You must input an account name.';
 			}
@@ -47,13 +47,13 @@ var inqPrompt = [
 		message: 'Please enter the name of the specific repository you want:',
 		name: 'repoName',
 		type: 'input',
-		validate: function (answer) {
+		validate: function(answer) {
 			if (answer == '') {
 				return 'You must input a repository name.';
 			}
 			return true;
 		},
-		when: function (answers) {
+		when: function(answers) {
 			return answers.allOrUniqueRepos === 'a specific repository';
 		}
 	}
@@ -73,24 +73,26 @@ function getAllIssues() {
 
 function getAllOrgRepos(org, callback) {
 	function _getAllOrgRepos() {
-		github.repos.getForOrg({
-			org: org,
-			page: page,
-			per_page: 100,
-			type: 'public'
-		}, function(err, res) {
-			res.data.forEach(function(repo) {
-				collectedRepos.push({ name: repo.name, owner: org })
-			})
+		github.repos.getForOrg(
+			{
+				org: org,
+				page: page,
+				per_page: 100,
+				type: 'public'
+			}, function(err, res) {
+				res.data.forEach(function(repo) {
+					collectedRepos.push({ name: repo.name, owner: org })
+				})
 
-			if (github.hasNextPage(res)) {
-				page += 1;
-				_getAllOrgRepos();
+				if (github.hasNextPage(res)) {
+					page += 1;
+					_getAllOrgRepos();
+				}
+				else {
+					callback(collectedRepos);
+				}
 			}
-			else {
-				callback(collectedRepos);
-			}
-		});
+		);
 	}
 
 	var page = 1;
@@ -101,24 +103,31 @@ function getAllOrgRepos(org, callback) {
 
 function getAllUserRepos(username, callback) {
 	function _getAllUserRepos() {
-		github.repos.getForUser({
-			page: page,
-			per_page: 100,
-			type: 'owner',
-			username: username
-		}, function(err, res) {
-			res.data.forEach(function(repo) {
-				collectedRepos.push({ name: repo.name, owner: username })
-			})
+		github.repos.getForUser(
+			{
+				page: page,
+				per_page: 100,
+				type: 'owner',
+				username: username
+			}, function(err, res) {
+				res.data.forEach(function(repo) {
+					collectedRepos.push(
+						{
+							name: repo.name,
+							owner: username
+						}
+					)
+				})
 
-			if (github.hasNextPage(res)) {
-				page += 1;
-				_getAllUserRepos();
+				if (github.hasNextPage(res)) {
+					page += 1;
+					_getAllUserRepos();
+				}
+				else {
+					callback(collectedRepos);
+				}
 			}
-			else {
-				callback(collectedRepos);
-			}
-		});
+		);
 	}
 
 	var page = 1;
@@ -139,11 +148,13 @@ function getIssues(accountOwner, curRepoName, callback) {
 				state: 'all'
 			}, function(err, res) {
 				res.data.forEach(function(issue) {
-					collectedIssues.push({
-						closed: issue.closed_at,
-						created: issue.created_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
-						num: issue.number
-					})
+					collectedIssues.push(
+						{
+							closed: issue.closed_at,
+							created: issue.created_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
+							num: issue.number
+						}
+					)
 				})
 
 				if (github.hasNextPage(res)) {
@@ -163,10 +174,12 @@ function getIssues(accountOwner, curRepoName, callback) {
 }
 
 function initiateGip() {
-	github.authenticate({
-		token: '6e93bad50b035f9c972f8fba3eed0d8bf59e926f',
-		type: 'token'
-	});
+	github.authenticate(
+		{
+			token: '21af985cd34af934d6596ebf53a336849fed6635',
+			type: 'token'
+		}
+	);
 
 	var accountType = inqAnswers.accountType;
 	var accountName = inqAnswers.accountName;
@@ -211,7 +224,7 @@ function phantomRender(repo, issue, remainingIssues) {
 
 		await page.render('./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf');
 
-		console.log('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf]');
+		process.stdout.write('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf]\n');
 
 		await instance.exit();
 
@@ -222,7 +235,7 @@ function phantomRender(repo, issue, remainingIssues) {
 }
 
 inq.prompt(inqPrompt).then(
-	function (answers) {
+	function(answers) {
 		inqAnswers = answers;
 	}
 ).then(initiateGip);
