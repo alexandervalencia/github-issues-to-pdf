@@ -16,11 +16,13 @@ var github = new GitHubApi(
 var inqPrompt = [
 	{
 		choices: ['organization', 'user'],
+		default: 'organization',
 		type: 'list',
 		message: 'What is the account type you\'re searching for?',
 		name: 'accountType'
 	},
 	{
+		default: 'electricjs',
 		filter: function(answer) {
 			return answer.toLowerCase();
 		},
@@ -36,11 +38,13 @@ var inqPrompt = [
 	},
 	{
 		choices: ['all', 'a specific repository'],
+		default: 'all',
 		type: 'list',
 		message: 'Would you like to get the issues from every repository for the account or a specific one?',
 		name: 'allOrUniqueRepos'
 	},
 	{
+		default: 'electric',
 		filter: function(answer) {
 			return answer.toLowerCase();
 		},
@@ -55,6 +59,29 @@ var inqPrompt = [
 		},
 		when: function(answers) {
 			return answers.allOrUniqueRepos === 'a specific repository';
+		}
+	},
+	{
+		default: false,
+		message: 'Are you searching for issues that were open during a specific year?',
+		name: 'searchByDate',
+		type: 'confirm'
+	},
+	{
+		message: 'What year was the issue open during? (YYYY)',
+		name: 'issueDate',
+		type: 'input',
+		validate: function(answer) {
+			var pass = answer.match(/^(\d{4})/gm);
+
+			if (pass) {
+				return true;
+			}
+
+			return 'Please enter a valid year (YYYY).'
+		},
+		when: function(answers) {
+			return answers.searchByDate === true;
 		}
 	}
 ];
@@ -176,7 +203,7 @@ function getIssues(accountOwner, curRepoName, callback) {
 function initiateGip() {
 	github.authenticate(
 		{
-			token: '21af985cd34af934d6596ebf53a336849fed6635',
+			token: 'PERSONAL ACCESS TOKEN GOES HERE',
 			type: 'token'
 		}
 	);
@@ -218,13 +245,20 @@ function phantomRender(repo, issue, remainingIssues) {
 		var instance = await phantom.create();
 		var page = await instance.createPage();
 
-		await page.property('paperSize', {format: 'letter', margin: '0.5in', orientation: 'portrait'});
+		await page.property(
+			'paperSize',
+			{
+				format: 'letter',
+				margin: '0.5in',
+				orientation: 'portrait'
+			}
+		);
 
 		var status = await page.open('https://github.com/' + repo.owner + '/' + repo.name + '/issues/' + issue.num);
 
 		await page.render('./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf');
 
-		process.stdout.write('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf]\n');
+		process.stdout.write('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' + issue.num + '.pdf]\n');
 
 		await instance.exit();
 
