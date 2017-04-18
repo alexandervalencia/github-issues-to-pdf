@@ -1,6 +1,6 @@
 {
   "name": "github-issues-to-pdf",
-  "version": "1.0.2",
+  "version": "1.1.1",
   "description": "Given a username, GIP will crawl through their repositories grabbing all issues and outputting them to a local folder as PDFs.",
   "main": "gip.js",
   "scripts": {
@@ -18,7 +18,8 @@
     "tickets",
     "problems",
     "pdf",
-    "export"
+    "export",
+	"phantom"
   ],
   "author": "Alex Valencia <alex.valencia@me.com> (http://www.avocadodesigns.net)",
   "license": "ISC",
@@ -28,7 +29,7 @@
   "homepage": "https://github.com/alexandervalencia/github-issues-to-pdf#readme",
   "dependencies": {
     "github": "^9.2.0",
-    "phantomjs": "^2.1.7",
-    "readline-sync": "^1.4.7"
+    "inquirer": "^3.0.6",
+    "phantomjs": "^2.1.7"
   }
 }
