@@ -1,7 +1,7 @@
 var GitHubApi = require('github');
 var inq = require('inquirer');
+var inqAnswers;
 var phantom = require('phantom');
-var inqAnswers = [];
 
 var github = new GitHubApi(
 	{
@@ -38,7 +38,7 @@ var inqPrompt = [
 		choices: ['all', 'a specific repository'],
 		type: 'list',
 		message: 'Would you like to get the issues from every repository for the account or a specific one?',
-		name: 'getAllorUniqueRepos'
+		name: 'allOrUniqueRepos'
 	},
 	{
 		filter: function(answer) {
@@ -54,7 +54,7 @@ var inqPrompt = [
 			return true;
 		},
 		when: function (answers) {
-			return answers.getAllorUniqueRepos === 'a specific repository';
+			return answers.allOrUniqueRepos === 'a specific repository';
 		}
 	}
 ];
@@ -140,7 +140,7 @@ function getIssues(accountOwner, curRepoName, callback) {
 			}, function(err, res) {
 				res.data.forEach(function(issue) {
 					collectedIssues.push({
-						closed: issue.closed_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
+						closed: issue.closed_at,
 						created: issue.created_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
 						num: issue.number
 					})
@@ -164,21 +164,14 @@ function getIssues(accountOwner, curRepoName, callback) {
 
 function initiateGip() {
 	github.authenticate({
-		token: 'a56f2c337e249b0c9809c1693b9d72effd5bf49d',
+		token: '6e93bad50b035f9c972f8fba3eed0d8bf59e926f',
 		type: 'token'
 	});
 
-	inq.prompt(inqPrompt).then(
-		function (answers) {
-			inqAnswers.push(answers);
-		}
-	);
-
-	var repoName;
-	var accountType = getAccountType(['organization', 'user']);
-	var accountName = getAccountName();
-	var allOrUniqueRepos = getAllOrUniqueRepos(['all', 'a specific repo']);
-	repoName = getRepoName();
+	var accountType = inqAnswers.accountType;
+	var accountName = inqAnswers.accountName;
+	var allOrUniqueRepos = inqAnswers.allOrUniqueRepos;
+	var repoName = inqAnswers.repoName;
 
 	if ((accountType === 'organization') && (allOrUniqueRepos === 'all')) {
 		getAllOrgRepos(accountName, function(orgRepos) {
@@ -187,7 +180,7 @@ function initiateGip() {
 			})
 		})
 	}
-	else if ((accountType === 'user') && (allOrUniqueRepos === 'all') {
+	else if ((accountType === 'user') && (allOrUniqueRepos === 'all')) {
 		getAllUserRepos(accountName, function(userRepos) {
 			userRepos.forEach(function(repo) {
 				getIssuesAndRenderRepo(repo)
@@ -195,24 +188,19 @@ function initiateGip() {
 		})
 	}
 	else {
-		var repo = { name: repoName, owner: accountName }
+		var repo = { name: repoName, owner: accountName };
+
 		getIssuesAndRenderRepo(repo)
 	}
 }
 
 function getIssuesAndRenderRepo(repo) {
 	getIssues(repo.owner, repo.name, function(issues) {
-		renderRepoIssues(repo, issues)
+		phantomRender(repo, issues[0], issues.slice(1));
 	})
 }
 
-function renderRepoIssues(repo, issues) {
-	issues.forEach(function(issue) {
-		setTimeout(phantomRender(repo, issue), 1000)
-	})
-}
-
-function phantomRender(repo, issue) {
+function phantomRender(repo, issue, remainingIssues) {
 	(async function() {
 		var instance = await phantom.create();
 		var page = await instance.createPage();
@@ -226,7 +214,15 @@ function phantomRender(repo, issue) {
 		console.log('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf]');
 
 		await instance.exit();
+
+		if (remainingIssues.length > 0) {
+			phantomRender(repo, remainingIssues[0], remainingIssues.slice(1));
+		}
 	}());
 }
 
-initiateGip();
+inq.prompt(inqPrompt).then(
+	function (answers) {
+		inqAnswers = answers;
+	}
+).then(initiateGip);

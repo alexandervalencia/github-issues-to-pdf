@@ -1,5 +1,5 @@
 var inq = require('inquirer');
-var inqAnswers = [];
+var inqAnswers;
 var inqPrompt = [
 	{
 		choices: ['organization', 'user'],
@@ -25,7 +25,7 @@ var inqPrompt = [
 		choices: ['all', 'a specific repository'],
 		type: 'list',
 		message: 'Would you like to get the issues from every repository for the account or a specific one?',
-		name: 'allorUniqueRepos'
+		name: 'allOrUniqueRepos'
 	},
 	{
 		filter: function(answer) {
@@ -41,23 +41,19 @@ var inqPrompt = [
 			return true;
 		},
 		when: function (answers) {
-			return answers.getAllorUniqueRepos === 'a specific repository';
+			return answers.allOrUniqueRepos === 'a specific repository';
 		}
 	}
 ];
 
-inq.prompt(inqPrompt).then(
-	function (answers) {
-		inqAnswers.push(answers);
-	}
-).then(initiateGip());
 
-var accountType = inqAnswers.accountType;
-var accountName = inqAnswers.accountName;
-var allOrUniqueRepos = inqAnswers.allOrUniqueRepos;
-var repoName = inqAnswers.repoName;
 
 function initiateGip() {
+	var accountType = inqAnswers.accountType;
+	var accountName = inqAnswers.accountName;
+	var allOrUniqueRepos = inqAnswers.allOrUniqueRepos;
+	var repoName = inqAnswers.repoName;
+
 	if ((accountType === 'organization') && (allOrUniqueRepos === 'all')) {
 	console.log('ALL ORG ' + accountType + ' ' + accountName + ' ' + allOrUniqueRepos + ' ' + repoName);
 	}
