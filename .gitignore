@@ -4,3 +4,4 @@ node_modules
 partials
 rendered_PDFs
 *.pdf
+token.json

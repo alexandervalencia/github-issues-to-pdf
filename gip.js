@@ -1,10 +1,12 @@
+var chalk = require('chalk');
+var fs = require('fs');
 var GitHubApi = require('github');
 var inq = require('inquirer');
-var inqAnswers;
 var phantom = require('phantom');
 
 var github = new GitHubApi(
 	{
+		debug: true,
 		followRedirects: false,
 		headers: {'user-agent': 'GitHub-Issues-to-PDF'},
 		host: 'api.github.com',
@@ -17,12 +19,11 @@ var inqPrompt = [
 	{
 		choices: ['organization', 'user'],
 		default: 'organization',
-		type: 'list',
 		message: 'What is the account type you\'re searching for?',
-		name: 'accountType'
+		name: 'accountType',
+		type: 'list'
 	},
 	{
-		default: 'electricjs',
 		filter: function(answer) {
 			return answer.toLowerCase();
 		},
@@ -37,14 +38,13 @@ var inqPrompt = [
 		}
 	},
 	{
-		choices: ['all', 'a specific repository'],
-		default: 'all',
-		type: 'list',
-		message: 'Would you like to get the issues from every repository for the account or a specific one?',
-		name: 'allOrUniqueRepos'
+		choices: ['one', 'multiple', 'all'],
+		message: 'How many repositories would you like to search?',
+		name: 'allOrUniqueRepos',
+		type: 'list'
 	},
 	{
-		default: 'electric',
+		default: 'wedeploy.com',
 		filter: function(answer) {
 			return answer.toLowerCase();
 		},
@@ -58,27 +58,28 @@ var inqPrompt = [
 			return true;
 		},
 		when: function(answers) {
-			return answers.allOrUniqueRepos === 'a specific repository';
+			return answers.allOrUniqueRepos === 'one';
 		}
 	},
 	{
-		default: false,
+		default: true,
 		message: 'Are you searching for issues that were open during a specific year?',
 		name: 'searchByDate',
 		type: 'confirm'
 	},
 	{
-		message: 'What year was the issue open during? (YYYY)',
+		default: 2016,
+		message: 'What year was the issue open during?',
 		name: 'issueDate',
 		type: 'input',
-		validate: function(answer) {
-			var pass = answer.match(/^(\d{4})/gm);
+		validate: function(value) {
+			var pass = value.match(/^(\d{4})$/);
 
 			if (pass) {
 				return true;
 			}
 
-			return 'Please enter a valid year (YYYY).'
+			return 'Please enter a valid year (YYYY).';
 		},
 		when: function(answers) {
 			return answers.searchByDate === true;
@@ -86,30 +87,46 @@ var inqPrompt = [
 	}
 ];
 
-function getAllIssues() {
-	function createIssueCallback(repo) {
-		return function(issues) {
-			repo.issue = issues
-		}
-	}
+function initiateGip(answers, gToken) {
+	github.authenticate({token: gToken.gToken, type: 'token'});
 
-	for (var i = 0; i < masterList.repo.length; i++) {
-		getIssues(accountName, masterList.repo[i].name, createIssueCallback(masterList.repo[i]));
+	if ((answers.accountType === 'organization') && (answers.allOrUniqueRepos === 'all')) {
+		getAllOrgRepos(answers.accountName, function(orgRepos) {
+			orgRepos.forEach(function(repo) {
+				getIssuesAndRenderRepo(repo, answers.issueDate);
+			});
+		});
+	}
+	else if ((answers.accountType === 'user') && (answers.allOrUniqueRepos === 'all')) {
+		getAllUserRepos(answers.accountName, function(userRepos) {
+			userRepos.forEach(function(repo) {
+				getIssuesAndRenderRepo(repo, answers.issueDate);
+			});
+		});
+	}
+	else {
+		var repo = {name: answers.repoName, owner: answers.accountName};
+
+		getIssuesAndRenderRepo(repo, answers.issueDate);
 	}
 }
 
 function getAllOrgRepos(org, callback) {
 	function _getAllOrgRepos() {
 		github.repos.getForOrg(
-			{
-				org: org,
-				page: page,
-				per_page: 100,
-				type: 'public'
-			}, function(err, res) {
-				res.data.forEach(function(repo) {
-					collectedRepos.push({ name: repo.name, owner: org })
-				})
+			{org: org,
+			page: page,
+			per_page: 100,
+			type: 'public'},
+			function(err, res) {
+				res.data.forEach(
+					function(repo) {
+						collectedRepos.push(
+							{name: repo.name,
+							owner: org}
+						);
+					}
+				);
 
 				if (github.hasNextPage(res)) {
 					page += 1;
@@ -122,29 +139,28 @@ function getAllOrgRepos(org, callback) {
 		);
 	}
 
-	var page = 1;
 	var collectedRepos = [];
+	var page = 1;
 
-	_getAllOrgRepos()
+	_getAllOrgRepos();
 }
 
 function getAllUserRepos(username, callback) {
 	function _getAllUserRepos() {
 		github.repos.getForUser(
-			{
-				page: page,
-				per_page: 100,
-				type: 'owner',
-				username: username
-			}, function(err, res) {
-				res.data.forEach(function(repo) {
-					collectedRepos.push(
-						{
-							name: repo.name,
-							owner: username
-						}
-					)
-				})
+			{page: page,
+			per_page: 100,
+			type: 'owner',
+			username: username},
+			function(err, res) {
+				res.data.forEach(
+					function(repo) {
+						collectedRepos.push(
+							{name: repo.name,
+							owner: username}
+						);
+					}
+				);
 
 				if (github.hasNextPage(res)) {
 					page += 1;
@@ -157,8 +173,8 @@ function getAllUserRepos(username, callback) {
 		);
 	}
 
-	var page = 1;
 	var collectedRepos = [];
+	var page = 1;
 
 	_getAllUserRepos();
 }
@@ -166,110 +182,120 @@ function getAllUserRepos(username, callback) {
 function getIssues(accountOwner, curRepoName, callback) {
 	function _getIssues() {
 		github.issues.getForRepo(
-			{
-				owner: accountOwner,
-				page: page,
-				per_page: 100,
-				repo: curRepoName,
-				// since: '2016-01-01T00:00:01Z',
-				state: 'all'
-			}, function(err, res) {
+			{owner: accountOwner,
+			page: page,
+			per_page: 100,
+			repo: curRepoName,
+			state: 'all'},
+			function(err, res) {
 				res.data.forEach(function(issue) {
 					collectedIssues.push(
-						{
-							closed: issue.closed_at,
-							created: issue.created_at.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm),
-							num: issue.number
-						}
-					)
-				})
+						{closed: issue.closed_at,
+						created: issue.created_at,
+						num: issue.number}
+					);
+				});
 
 				if (github.hasNextPage(res)) {
 					page += 1;
-					_getIssues()
-				} else {
+					_getIssues();
+				}
+				else {
 					callback(collectedIssues);
 				}
 			}
-		)
-	};
+		);
+	}
 
-	var page = 1;
 	var collectedIssues = [];
+	var page = 1;
 
 	_getIssues();
 }
 
-function initiateGip() {
-	github.authenticate(
-		{
-			token: 'PERSONAL ACCESS TOKEN GOES HERE',
-			type: 'token'
-		}
-	);
-
-	var accountType = inqAnswers.accountType;
-	var accountName = inqAnswers.accountName;
-	var allOrUniqueRepos = inqAnswers.allOrUniqueRepos;
-	var repoName = inqAnswers.repoName;
-
-	if ((accountType === 'organization') && (allOrUniqueRepos === 'all')) {
-		getAllOrgRepos(accountName, function(orgRepos) {
-			orgRepos.forEach(function(repo) {
-				getIssuesAndRenderRepo(repo)
-			})
-		})
-	}
-	else if ((accountType === 'user') && (allOrUniqueRepos === 'all')) {
-		getAllUserRepos(accountName, function(userRepos) {
-			userRepos.forEach(function(repo) {
-				getIssuesAndRenderRepo(repo)
-			})
-		})
-	}
-	else {
-		var repo = { name: repoName, owner: accountName };
-
-		getIssuesAndRenderRepo(repo)
-	}
-}
-
-function getIssuesAndRenderRepo(repo) {
+function getIssuesAndRenderRepo(repo, date) {
 	getIssues(repo.owner, repo.name, function(issues) {
-		phantomRender(repo, issues[0], issues.slice(1));
-	})
+		if (date == null) {
+			phantomRender(repo, issues[0], issues.slice(1));
+		}
+		else {
+			renderIssuesByYear(issues, date, function(datedIssues) {
+				phantomRender(repo, datedIssues[0], datedIssues.slice(1));
+			});
+		}
+	});
 }
 
-function phantomRender(repo, issue, remainingIssues) {
-	(async function() {
-		var instance = await phantom.create();
-		var page = await instance.createPage();
+function renderIssuesByYear(issues, date, callback) {
+	function _renderIssuesByYear() {
+		issues.forEach(
+			function(issue) {
+				const createdOnOrBeforeDate = (issue.created.match(/^(\d{4})/gm) == date);
+				const notClosedOrClosedAfterDate = ((issue.created.match(/^(\d{4})/gm) <= date) && (!issue.closed || issue.closed.match(/^(\d{4})/gm) >= date));
 
-		await page.property(
-			'paperSize',
-			{
-				format: 'letter',
-				margin: '0.5in',
-				orientation: 'portrait'
+				if (createdOnOrBeforeDate || notClosedOrClosedAfterDate) {
+					datedIssues.push(
+						{
+							created: issue.created,
+							num: issue.num
+						}
+					);
+				}
 			}
 		);
 
-		var status = await page.open('https://github.com/' + repo.owner + '/' + repo.name + '/issues/' + issue.num);
+		callback(datedIssues);
+	}
 
-		await page.render('./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' +issue.num + '.pdf');
+	var datedIssues = [];
 
-		process.stdout.write('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created + '_issue' + issue.num + '.pdf]\n');
+	_renderIssuesByYear();
+}
 
-		await instance.exit();
+function phantomRender(repo, issue, remainingIssues) {
+	if (issue != undefined) {
+		(async function() {
+			var ph = await phantom.create();
+			var phPage = await ph.createPage();
 
-		if (remainingIssues.length > 0) {
-			phantomRender(repo, remainingIssues[0], remainingIssues.slice(1));
-		}
-	}());
+			await phPage.property(
+				'paperSize',
+				{
+					format: 'letter',
+					margin: '0.5in',
+					orientation: 'portrait'
+				}
+			);
+
+			var status = await phPage.open('https://github.com/' + repo.owner + '/' + repo.name + '/issues/' + issue.num);
+
+			await phPage.render('./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm) + '_issue' + issue.num + '.pdf');
+
+			process.stdout.write('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm) + '_issue' + issue.num + '.pdf]\n');
+
+			await ph.exit();
+
+			if (remainingIssues.length > 0) {
+				phantomRender(repo, remainingIssues[0], remainingIssues.slice(1));
+			}
+			else {
+				process.stdout.write(chalk.yellow('\nAll issues from the repository ' + chalk.cyan('[' + repo.name + ']') + ' have finished rendering. \n\n'));
+
+				return;
+			}
+		}());
+	}
+	else {
+
+		process.stdout.write(chalk.yellow('\nNo issues found in repository ' + chalk.cyan('[' + repo.name + ']') + '. \n\n'));
+
+		return;
+
+	}
 }
 
 inq.prompt(inqPrompt).then(
 	function(answers) {
-		inqAnswers = answers;
+		initiateGip(answers, JSON.parse(fs.readFileSync('token.json', 'utf-8')));
 	}
-).then(initiateGip);
+);
