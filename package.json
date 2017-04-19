@@ -19,7 +19,7 @@
     "problems",
     "pdf",
     "export",
-	"phantom"
+    "phantom"
   ],
   "author": "Alex Valencia <alex.valencia@me.com> (http://www.avocadodesigns.net)",
   "license": "ISC",
@@ -28,6 +28,7 @@
   },
   "homepage": "https://github.com/alexandervalencia/github-issues-to-pdf#readme",
   "dependencies": {
+    "chalk": "^1.1.3",
     "github": "^9.2.0",
     "inquirer": "^3.0.6",
     "phantomjs": "^2.1.7"
