@@ -1,15 +1,17 @@
 var chalk = require('chalk');
 var fs = require('fs');
 var GitHubApi = require('github');
-var inq = require('inquirer');
-var phantom = require('phantom');
 
 var github = new GitHubApi(
 	{
-		followRedirects: false,
-		headers: {'user-agent': 'GitHub-Issues-to-PDF'},
+		headers: {'user-agent': 'GitHub-Issues-to-PDF'}
 	}
 );
+
+var inq = require('inquirer');
+var phantom = require('phantom');
+var repoArray = [];
+var repoList = [];
 
 function checkForToken() {
 	try {
@@ -91,52 +93,42 @@ function gatherAccountInfo() {
 				}
 			}
 		]
-	)
+	);
 }
 
-function gatherMultipleRepos() {
-	function _gatherMulitpleRepos(i, sep) {
-		if (!sep) {
-			sep = '';
-		}
-		if (!i) {
-			i = 0;
-		}
-		return inq.prompt(
-			[{
-				message: 'Input a repository to search:',
-				name: 'repoName',
-				type: 'input'
-			},
-			{
-				message: answers => {
-					return 'Current repository list: ' + chalk.yellow(repoList + sep + ' ' + answers.repoName) + '\nWould you like add another repository?';
-				},
-				name: 'done',
-				type: 'confirm'
-			}]
-		).then(
-			answers => {
-				repoList.push(' ' + answers.repoName);
-				repoArray.push({name: answers.repoName});
-				if (answers.done === true) {
-					_gatherMulitpleRepos(i + 1, ',');
-
-				}
-				else {
-					return repoArray;
-				}
-			}
-		);
+function gatherMulitpleRepos(i, sep) {
+	if (!sep) {
+		sep = '';
 	}
-
-	var repoArray = [];
-	var repoList = [];
-
-	_gatherMulitpleRepos();
+	if (!i) {
+		i = 0;
+	}
+	return inq.prompt(
+		[{
+			message: 'Input a repository to search:',
+			name: 'repoName',
+			type: 'input'
+		},
+		{
+			message: answers => {
+				return 'Current repository list: ' + chalk.yellow(repoList + sep + ' ' + answers.repoName) + '\nWould you like add another repository?';
+			},
+			name: 'more',
+			type: 'confirm'
+		}]
+	).then(
+		answers => {
+			repoList.push(' ' + answers.repoName);
+			repoArray.push({name: answers.repoName});
+			if (answers.more === true) {
+				return gatherMulitpleRepos(i + 1, ',');
+			}
+			return repoArray;
+		}
+	);
 }
 
-function checkForDates() {
+function checkForYear() {
 	return inq.prompt(
 		[
 			{
@@ -146,8 +138,8 @@ function checkForDates() {
 				type: 'confirm'
 			},
 			{
-				message: 'What year was the issue open during?',
-				name: 'issueDate',
+				message: 'What year were the issues open during?',
+				name: 'issueYear',
 				type: 'input',
 				validate: value => {
 					var pass = value.match(/^(\d{4})$/);
@@ -163,10 +155,10 @@ function checkForDates() {
 				}
 			}
 		]
-	)
+	);
 }
 
-function callGitHub(token, account, multipleRepos, date) {
+function callGitHub(token, account, multipleRepos, year) {
 	github.authenticate({token: token.token, type: 'token'});
 	if ((account.accountType === 'organization') && (account.howManyRepos === 'all')) {
 		getAllOrgRepos(
@@ -174,7 +166,7 @@ function callGitHub(token, account, multipleRepos, date) {
 			orgRepos => {
 				orgRepos.forEach(
 					repo => {
-						getIssuesAndRenderRepo(repo, date.date);
+						getIssuesAndRenderRepo(repo, year);
 					}
 				);
 			}
@@ -186,25 +178,29 @@ function callGitHub(token, account, multipleRepos, date) {
 			userRepos => {
 				userRepos.forEach(
 					repo => {
-						getIssuesAndRenderRepo(repo, date.date);
+						getIssuesAndRenderRepo(repo, year);
 					}
 				);
 			}
 		);
 	}
 	else if (account.howManyRepos === 'multiple') {
-		var repo = {owner: account.accountName};
-
-		multipleRepos.forEach(
-			() => {
-				getIssuesAndRenderRepo(repo, date.date);
+		getMultipleRepos(
+			account.accountName,
+			multipleRepos,
+			repoList => {
+				repoList.forEach(
+					repo => {
+						getIssuesAndRenderRepo(repo, year);
+					}
+				);
 			}
 		);
 	}
 	else {
 		var repo = {name: account.repoName, owner: account.accountName};
 
-		getIssuesAndRenderRepo(repo, null);
+		getIssuesAndRenderRepo(repo, year);
 	}
 }
 
@@ -276,6 +272,14 @@ function getAllUserRepos(username, callback) {
 	_getAllUserRepos();
 }
 
+function getMultipleRepos(owner, repoList, callback) {
+	for (prop in repoList) {
+		repoList[prop].owner = owner;
+	}
+
+	callback(repoList);
+}
+
 function getIssues(owner, repo, callback) {
 	function _getIssues() {
 		github.issues.getForRepo(
@@ -312,33 +316,12 @@ function getIssues(owner, repo, callback) {
 	_getIssues();
 }
 
-function getIssuesAndRenderRepo(repo, date) {
-	getIssues(
-		repo.owner,
-		repo.name,
-		issues => {
-			if (date == null) {
-				phantomRender(repo, issues[0], issues.slice(1));
-			}
-			else {
-				renderIssuesByYear(
-					issues,
-					date,
-					datedIssues => {
-						phantomRender(repo, datedIssues[0], datedIssues.slice(1));
-					}
-				);
-			}
-		}
-	);
-}
-
-function renderIssuesByYear(issues, date, callback) {
+function renderIssuesByYear(issues, year, callback) {
 	function _renderIssuesByYear() {
 		issues.forEach(
 			issue => {
-				const createdOnOrBeforeDate = (issue.created.match(/^(\d{4})/gm) == date);
-				const notClosedOrClosedAfterDate = ((issue.created.match(/^(\d{4})/gm) <= date) && (!issue.closed || issue.closed.match(/^(\d{4})/gm) >= date));
+				const createdOnOrBeforeDate = (issue.created.match(/^(\d{4})/gm) == year);
+				const notClosedOrClosedAfterDate = ((issue.created.match(/^(\d{4})/gm) <= year) && (!issue.closed || issue.closed.match(/^(\d{4})/gm) >= year));
 
 				if (createdOnOrBeforeDate || notClosedOrClosedAfterDate) {
 					datedIssues.push(
@@ -357,6 +340,27 @@ function renderIssuesByYear(issues, date, callback) {
 	var datedIssues = [];
 
 	_renderIssuesByYear();
+}
+
+function getIssuesAndRenderRepo(repo, year) {
+	getIssues(
+		repo.owner,
+		repo.name,
+		issues => {
+			if (!year.issueYear) {
+				phantomRender(repo, issues[0], issues.slice(1));
+			}
+			else {
+				renderIssuesByYear(
+					issues,
+					year.issueYear,
+					datedIssues => {
+						phantomRender(repo, datedIssues[0], datedIssues.slice(1));
+					}
+				);
+			}
+		}
+	);
 }
 
 function phantomRender(repo, issue, remainingIssues) {
@@ -403,68 +407,27 @@ function phantomRender(repo, issue, remainingIssues) {
 
 async function initiate() {
 	let token;
+	let multipleRepos;
 	if (!checkForToken()) {
 		token = await getToken();
 	}
 	else {
-		token = JSON.parse(fs.readFileSync('token.json'))
+		token = JSON.parse(fs.readFileSync('token.json'));
 	}
 
 	const accountInfo = await gatherAccountInfo();
 
 	if (accountInfo.howManyRepos === 'multiple') {
-		const multipleRepos = await gatherMultipleRepos();
-	} else {
+		multipleRepos = await gatherMulitpleRepos();
+	}
+	else {
 		multipleRepos = null;
 	}
 
-	const date = await checkForDates();
+	const year = await checkForYear();
 
-	await callGitHub(token, accountInfo, multipleRepos, date)
+	await callGitHub(token, accountInfo, multipleRepos, year);
 
 }
 
 initiate();
-
-/**
-function initiateGip() {
-	if (!checkForToken()) {
-		getToken(token => {
-			gatherAccountInfo(accountInfo => {
-				gatherRepoInfo(repoInfo => {
-					if (repoInfo.howManyRepos === 'multiple') {
-						gatherMultipleRepos(repos => {
-							checkForDates(date => {
-								callGitHub(
-									token.token,
-									accountInfo.accountType,
-									accountInfo.accountName,
-									repoInfo.howManyRepos,
-									null,
-									repos,
-									date
-								);
-							})
-						})
-					} else if (repoInfo.howManyRepos === 'all') {
-						checkForDates(date => {
-							callGitHub(
-								token.token,
-								accountInfo.accountType,
-								accountInfo.accountName,
-								repoInfo.howManyRepos,
-								null,
-								null,
-								date
-							);
-						})
-					}
-				})
-			})
-		});
-	}
-	else {
-		callGitHub(null, JSON.parse(fs.readFileSync('token.json')).token)
-	}
-}
-*/
