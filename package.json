@@ -4,7 +4,8 @@
   "description": "Given a username, GIP will crawl through their repositories grabbing all issues and outputting them to a local folder as PDFs.",
   "main": "gip.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node gip.js"
   },
   "repository": {
     "type": "git",
