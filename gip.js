@@ -1,6 +1,8 @@
 var chalk = require('chalk');
 var fs = require('fs');
 var GitHubApi = require('github');
+var inq = require('inquirer');
+var phantom = require('phantom');
 
 var github = new GitHubApi(
 	{
@@ -8,10 +10,10 @@ var github = new GitHubApi(
 	}
 );
 
-var inq = require('inquirer');
-var phantom = require('phantom');
 var repoArray = [];
 var repoList = [];
+
+const regexToken = //g
 
 function checkForToken() {
 	try {
@@ -20,26 +22,32 @@ function checkForToken() {
 	catch (e) {
 		return false;
 	}
+
 	return true;
 }
 
 function getToken() {
 	return inq.prompt(
-		[{message: 'Your GitHub Personal Access Token file doesn\'t exist yet, enter your token here and I\'ll save it for you:',
-		name: 'token',
-		type: 'input',
-		validate: value => {
-			const pass = value.match(/([a-zA-Z0-9]{40})+/g);
+		[
+			{
+				message: 'Your GitHub Personal Access Token file doesn\'t exist yet, enter your token here and I\'ll save it for you:',
+				name: 'token',
+				type: 'input',
+				validate: value => {
+					const pass = value.match(/([a-zA-Z0-9]{40})+/g);
 
-			if (pass) {
-				return true;
+					if (pass) {
+						return true;
+					}
+
+					return 'Please enter a valid GitHub Personal Access Token (40 alphanumeric characters).';
+				}
 			}
-
-			return 'Please enter a valid GitHub Personal Access Token (40 alphanumeric characters).';
-		}}]
+		]
 	).then(
 		answer => {
 			fs.writeFileSync('token.json', JSON.stringify(answer));
+
 			return answer;
 		}
 	);
@@ -66,6 +74,7 @@ function gatherAccountInfo() {
 					if (answer == '') {
 						return 'You must input an account name.';
 					}
+
 					return true;
 				}
 			},
@@ -185,15 +194,9 @@ function callGitHub(token, account, multipleRepos, year) {
 		);
 	}
 	else if (account.howManyRepos === 'multiple') {
-		getMultipleRepos(
-			account.accountName,
-			multipleRepos,
-			repoList => {
-				repoList.forEach(
-					repo => {
-						getIssuesAndRenderRepo(repo, year);
-					}
-				);
+		getMultipleRepos(account.accountName, multipleRepos).forEach(
+			repo => {
+				getIssuesAndRenderRepo(repo, year);
 			}
 		);
 	}
@@ -207,10 +210,12 @@ function callGitHub(token, account, multipleRepos, year) {
 function getAllOrgRepos(org, callback) {
 	function _getAllOrgRepos() {
 		github.repos.getForOrg(
-			{org,
-			page,
-			per_page: 100,
-			type: 'public'},
+			{
+				org,
+				page,
+				per_page: 100,
+				type: 'public'
+			},
 			(err, res) => {
 				res.data.forEach(
 					repo => {
@@ -241,10 +246,12 @@ function getAllOrgRepos(org, callback) {
 function getAllUserRepos(username, callback) {
 	function _getAllUserRepos() {
 		github.repos.getForUser(
-			{page,
-			per_page: 100,
-			type: 'owner',
-			username},
+			{
+				page,
+				per_page: 100,
+				type: 'owner',
+				username
+			},
 			(err, res) => {
 				res.data.forEach(
 					repo => {
@@ -272,74 +279,84 @@ function getAllUserRepos(username, callback) {
 	_getAllUserRepos();
 }
 
-function getMultipleRepos(owner, repoList, callback) {
+function getMultipleRepos(owner, repoList) {
 	for (prop in repoList) {
 		repoList[prop].owner = owner;
 	}
 
-	callback(repoList);
+	return repoList;
 }
 
 function getIssues(owner, repo, callback) {
-	function _getIssues() {
-		github.issues.getForRepo(
-			{owner,
-			page,
-			per_page: 100,
-			repo,
-			state: 'all'},
-			(err, res) => {
-				res.data.forEach(
-					issue => {
-						collectedIssues.push(
-							{closed: issue.closed_at,
-							created: issue.created_at,
-							num: issue.number}
-						);
-					}
-				);
-
-				if (github.hasNextPage(res)) {
-					page += 1;
-					_getIssues();
-				}
-				else {
-					callback(collectedIssues);
-				}
-			}
-		);
-	}
-
 	var collectedIssues = [];
 	var page = 1;
 
-	_getIssues();
+	getPageIssues(
+		{
+			owner,
+			repo,
+			page
+		},
+		[],
+		function(data) {
+			console.log(data);
+		}
+	);
 }
 
-function renderIssuesByYear(issues, year, callback) {
-	function _renderIssuesByYear() {
-		issues.forEach(
-			issue => {
-				const createdOnOrBeforeDate = (issue.created.match(/^(\d{4})/gm) == year);
-				const notClosedOrClosedAfterDate = ((issue.created.match(/^(\d{4})/gm) <= year) && (!issue.closed || issue.closed.match(/^(\d{4})/gm) >= year));
-
-				if (createdOnOrBeforeDate || notClosedOrClosedAfterDate) {
-					datedIssues.push(
+function getPageIssues(config, collection, callback) {
+	github.issues.getForRepo(
+		{
+			owner: config.owner,
+			page: config.page,
+			per_page: 100,
+			repo: config.repo,
+			state: 'all'
+		},
+		(err, res) => {
+			res.data.forEach(
+				issue => {
+					collection.push(
 						{
-							created: issue.created,
-							num: issue.num
+							closed: issue.closed_at,
+							created: issue.created_at,
+							num: issue.number
 						}
 					);
 				}
+			);
+
+			if (github.hasNextPage(res)) {
+				config.page++;
+				getPageIssues(config, collection, callback);
 			}
-		);
+			else {
+				callback(collection);
+			}
+		}
+	);
+}
 
-		callback(datedIssues);
-	}
+function renderIssuesByYear(issues, year) {
+	let datedIssues = [];
 
-	var datedIssues = [];
+	issues.forEach(
+		issue => {
+			const createdOnOrBeforeDate = (issue.created.match(/^(\d{4})/gm) == year);
+			const notClosedOrClosedAfterDate = ((issue.created.match(/^(\d{4})/gm) <= year) && (!issue.closed || issue.closed.match(/^(\d{4})/gm) >= year));
 
-	_renderIssuesByYear();
+			if (createdOnOrBeforeDate || notClosedOrClosedAfterDate) {
+				datedIssues.push(
+					{
+						created: issue.created,
+						num: issue.num
+					}
+				);
+			}
+		}
+	);
+
+	return datedIssues;
 }
 
 function getIssuesAndRenderRepo(repo, year) {
@@ -347,6 +364,20 @@ function getIssuesAndRenderRepo(repo, year) {
 		repo.owner,
 		repo.name,
 		issues => {
+			let tasks = issues.map(
+				issue => {
+					return callback => {
+						phantomRender(jlkasfd, asdf, () => {
+							callback();
+						})
+					}
+				}
+			);
+
+			async.parallelLimit(tasks, 5, function() {
+
+			});
+
 			if (!year.issueYear) {
 				phantomRender(repo, issues[0], issues.slice(1));
 			}
@@ -363,38 +394,36 @@ function getIssuesAndRenderRepo(repo, year) {
 	);
 }
 
-function phantomRender(repo, issue, remainingIssues) {
+async function phantomRender(repo, issue, remainingIssues) {
 	if (issue != undefined) {
-		(async function() {
-			var ph = await phantom.create();
-			var phPage = await ph.createPage();
+		var ph = await phantom.create();
+		var phPage = await ph.createPage();
 
-			await phPage.property(
-				'paperSize',
-				{
-					format: 'letter',
-					margin: '0.5in',
-					orientation: 'portrait'
-				}
-			);
-
-			await phPage.open('https://github.com/' + repo.owner + '/' + repo.name + '/issues/' + issue.num);
-
-			await phPage.render('./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm) + '_issue' + issue.num + '.pdf');
-
-			process.stdout.write('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm) + '_issue' + issue.num + '.pdf]\n');
-
-			await ph.exit();
-
-			if (remainingIssues.length > 0) {
-				phantomRender(repo, remainingIssues[0], remainingIssues.slice(1));
+		await phPage.property(
+			'paperSize',
+			{
+				format: 'letter',
+				margin: '0.5in',
+				orientation: 'portrait'
 			}
-			else {
-				process.stdout.write(chalk.yellow('\nAll issues from ' + chalk.cyan('[' + repo.name + ']') + ' have finished rendering. \n\n'));
+		);
 
-				return;
-			}
-		}());
+		await phPage.open(`https://github.com/${repo.owner}/${repo.name}/issues/${issue.num}`);
+
+		await phPage.render('./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm) + '_issue' + issue.num + '.pdf');
+
+		process.stdout.write('File created at [./rendered_PDFs/' + repo.owner + '_' + repo.name + '_' + issue.created.match(/^(\d{4})(-(\d{2}))(-(\d{2}))/gm) + '_issue' + issue.num + '.pdf]\n');
+
+		await ph.exit();
+
+		if (remainingIssues.length > 0) {
+			phantomRender(repo, remainingIssues[0], remainingIssues.slice(1));
+		}
+		else {
+			process.stdout.write(chalk.yellow('\nAll issues from ' + chalk.cyan('[' + repo.name + ']') + ' have finished rendering. \n\n'));
+
+			return;
+		}
 	}
 	else {
 
