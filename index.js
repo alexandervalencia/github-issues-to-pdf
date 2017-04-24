@@ -126,7 +126,7 @@ function getAllOrgRepos(config, collectedRepos, callback) {
 			org: config.accountInfo.accountName,
 			page: config.page,
 			per_page: 100,
-			type: 'public',
+			type: 'public'
 		},
 		(err, res) => {
 			if (err) {
@@ -235,8 +235,6 @@ function getIssues(config, repo, collectedIssues, callback) {
 }
 
 function getMultipleRepos(config) {
-	const collectedIssues = [];
-
 	async.eachSeries(
 		config.multipleRepos,
 		(repo, callback) => {
@@ -398,7 +396,7 @@ function promptForRepos(sep, repoListForPrompt, repoArray) {
 		},
 		{
 			message: answers => {
-				return `Current repository list: ${chalk.yellow(repoListForPrompt,sep, answers.repoName)} \n Would you like to add another repository?`;
+				return `Current repository list: ${chalk.yellow(repoListForPrompt, sep, answers.repoName)} \n Would you like to add another repository?`;
 			},
 			name: 'more',
 			type: 'confirm'
@@ -514,6 +512,6 @@ async function renderIssue(issue) {
 
 		return;
 	}
-};
+}
 
 managePrompts();
