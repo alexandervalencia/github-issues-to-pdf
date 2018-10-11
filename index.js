@@ -3,7 +3,7 @@ const chalk = require('chalk');
 const fs = require('fs');
 const GitHubApi = require('github');
 const inq = require('inquirer');
-const phantom = require('phantom');
+const puppeteer = require('puppeteer');
 
 const github = new GitHubApi(
 	{
@@ -485,26 +485,24 @@ function queueIssuesForRender(issues, callback) {
 
 async function renderIssue(issue) {
 	if (issue != undefined) {
+		const browser = await puppeteer.launch();
+		const page = await browser.newPage();
+		const localPath = './rendered_PDFs';
 
-		var ph = await phantom.create();
-		var phPage = await ph.createPage();
+		await page.goto(`https://github.com/${issue.owner}/${issue.repo}/issues/${issue.num}`, { waitUntil: 'networkidle2' });
 
-		await phPage.property(
-			'paperSize',
-			{
-				format: 'letter',
-				margin: '0.5in',
-				orientation: 'portrait'
-			}
-		);
+		if (!fs.existsSync(localPath)) {
+			fs.mkdirSync(localPath);
+		}
 
-		await phPage.open(`https://github.com/${issue.owner}/${issue.repo}/issues/${issue.num}`);
+		await page.pdf({
+			path: `${localPath}/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf`,
+			format: 'letter'
+		});
 
-		await phPage.render(`./rendered_PDFs/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf`);
+		process.stdout.write(`File created at [ ${localPath}/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf ]\n`);
 
-		process.stdout.write(`File created at [ ./rendered_PDFs/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf ]\n`);
-
-		await ph.exit();
+		await browser.close();
 	}
 	else {
 
