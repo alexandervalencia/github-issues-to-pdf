@@ -1,7 +1,7 @@
 # GitHub Issues to PDF
 ### A program to help collect GitHub issues as PDF files.
 
-## Note: Node v7.6+ required to run GitHub Issues to PDF
+## Note: Node v8+ required to run GitHub Issues to PDF
 
 ## Installation
 1. Clone or Download GitHub Issues to PDF (GIP).

@@ -13,5 +13,8 @@ module.exports = {
         trailingComma: 'es5',
       },
     ],
+    'import/no-commonjs': 'off',
+    'import/no-nodejs-modules': 'off',
+    'no-sync': 'off',
   },
 };
