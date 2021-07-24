@@ -5,3 +5,4 @@ partials
 rendered_PDFs
 *.pdf
 token.json
+package-lock.json
