@@ -7,13 +7,13 @@ const puppeteer = require('puppeteer');
 
 const github = new GitHubApi(
 	{
-		headers: {'user-agent': 'GitHub-Issues-to-PDF'}
+		headers: { 'user-agent': 'GitHub-Issues-to-PDF' }
 	}
 );
 
 const regexFileDate = /^(\d{4})(-(\d{2}))(-(\d{2}))/gm;
 const regexIssueYear = /^(\d{4})/gm;
-const regexToken = /([a-zA-Z0-9]{40})+/g;
+const regexToken = /([a-zA-Z0-9_]{40})+/g;
 const regexYear = /^(\d{4})$/;
 
 function checkForToken() {
@@ -69,14 +69,16 @@ function getAllForOrg(config) {
 						issues => {
 							if (!config.year.issueYear) {
 								queueIssuesForRender(collectedIssues, callback);
+								// queuePullRequestForRender(collectedIssues, callback);
 							}
 							else {
 								const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
 								queueIssuesForRender(datedIssues, callback);
+								// queuePullRequestForRender(collectedIssues, callback);
 							}
 						},
 						(err, res) => {
-							process.stdout.write(`\n${chalk.yellow('All issues have finished rendering, have a nice day!')}\n\n`);
+							process.stdout.write(`\n${chalk.yellow('All files have finished rendering, have a nice day!')}\n\n`);
 						}
 					);
 				}
@@ -96,24 +98,44 @@ function getAllForUser(config) {
 				repos,
 				(repo, callback) => {
 					config.page = 1;
-
-					getIssues(
-						config,
-						repo.name,
-						[],
-						issues => {
-							if (!config.year.issueYear) {
-								queueIssuesForRender(collectedIssues, callback);
+					let getIssueBool = true;
+					if (getIssueBool) {
+						getIssues(
+							config,
+							repo.name,
+							[],
+							issues => {
+								if (!config.year.issueYear) {
+									queueIssuesForRender(collectedIssues, callback);
+								}
+								else {
+									const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
+									queueIssuesForRender(datedIssues, callback);
+								}
+							},
+							(err, res) => {
+								return process.stdout.write(`\n${chalk.yellow('All issues have finished rendering, have a nice day!')}\n\n`);
 							}
-							else {
-								const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
-								queueIssuesForRender(datedIssues, callback);
+						);
+					} else {
+						getPullRequests(
+							config,
+							repo.name,
+							[],
+							issues => {
+								if (!config.year.issueYear) {
+									queueIssuesForRender(collectedIssues, callback);
+								}
+								else {
+									const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
+									queueIssuesForRender(datedIssues, callback);
+								}
+							},
+							(err, res) => {
+								return process.stdout.write(`\n${chalk.yellow('All PRs have finished rendering, have a nice day!')}\n\n`);
 							}
-						},
-						(err, res) => {
-							return process.stdout.write(`\n${chalk.yellow('All issues have finished rendering, have a nice day!')}\n\n`);
-						}
-					);
+						);
+					}
 				}
 			);
 		}
@@ -234,6 +256,47 @@ function getIssues(config, repo, collectedIssues, callback) {
 	);
 }
 
+function getPullRequests(config, repo, collectedPR, callback) {
+	github.pullRequests.getAll(
+		{
+			owner: config.accountInfo.accountName,
+			page: config.page,
+			per_page: 100,
+			repo,
+			state: 'all'
+		},
+		(err, res) => {
+			if (err) {
+				process.stdout.write(`${chalk.bgRed('ERROR:')} Either the account ${chalk.yellow('[')} ${chalk.yellow(config.accountInfo.accountName)} ${chalk.yellow(']')} or the repository ${chalk.yellow('[')} ${chalk.yellow(repo)} ${chalk.yellow(']')} couldn\'t be found, double-check the names and try again.\n`);
+
+				return;
+			}
+
+			res.data.forEach(
+				pr => {
+					collectedPR.push(
+						{
+							closed: pr.closed_at,
+							created: pr.created_at,
+							num: pr.number,
+							owner: config.accountInfo.accountName,
+							repo
+						}
+					);
+				}
+			);
+
+			if (github.hasNextPage(res)) {
+				config.page++;
+				getPullRequests(config, repo, collectedPR, callback);
+			}
+			else {
+				callback(collectedPR);
+			}
+		}
+	);
+}
+
 function getMultipleRepos(config) {
 	async.eachSeries(
 		config.multipleRepos,
@@ -273,6 +336,21 @@ function getSingleRepo(config) {
 			else {
 				const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
 				queueIssuesForRender(datedIssues, () => {});
+			}
+		}
+	);
+
+	getPullRequests(
+		config,
+		config.accountInfo.repoName,
+		[],
+		issues => {
+			if (!config.year.issueYear) {
+				queuePullRequestForRender(issues, () => { });
+			}
+			else {
+				const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
+				queuePullRequestForRender(datedIssues, () => { });
 			}
 		}
 	);
@@ -404,7 +482,7 @@ function promptForRepos(sep, repoListForPrompt, repoArray) {
 	).then(
 		answers => {
 			repoListForPrompt.push(` ${answers.repoName}`);
-			repoArray.push({name: answers.repoName});
+			repoArray.push({ name: answers.repoName });
 			if (answers.more === true) {
 				return promptForRepos(',', repoListForPrompt, repoArray);
 			}
@@ -415,18 +493,20 @@ function promptForRepos(sep, repoListForPrompt, repoArray) {
 
 function promptForToken() {
 	return inq.prompt(
-		[{message: 'Your GitHub Personal Access Token file doesn\'t exist yet, enter your token here and I\'ll save it for you:',
-		name: 'id',
-		type: 'input',
-		validate: value => {
-			const pass = value.match(regexToken);
+		[{
+			message: 'Your GitHub Personal Access Token file doesn\'t exist yet, enter your token here and I\'ll save it for you:',
+			name: 'id',
+			type: 'input',
+			validate: value => {
+				const pass = value.match(regexToken);
 
-			if (pass) {
-				return true;
+				if (pass) {
+					return true;
+				}
+
+				return 'Please enter a valid GitHub Personal Access Token (40 alphanumeric characters).';
 			}
-
-			return 'Please enter a valid GitHub Personal Access Token (40 alphanumeric characters).';
-		}}]
+		}]
 	).then(
 		answer => {
 			fs.writeFileSync('token.json', JSON.stringify(answer));
@@ -483,30 +563,98 @@ function queueIssuesForRender(issues, callback) {
 	);
 }
 
+function queuePullRequestForRender(pr, callback) {
+	async.mapLimit(
+		pr,
+		15,
+		renderPullRequest,
+		(err, res) => {
+			if (err) {
+				throw err;
+			}
+
+			if (pr[0] != undefined) {
+				process.stdout.write(`\n${chalk.yellow('All Pull Requests from ')} ${chalk.cyan('[')} ${chalk.cyan(pr[0].repo)} ${chalk.cyan(']')} ${chalk.yellow(' have finished rendering.')}\n\n`);
+			}
+
+			callback();
+		}
+	);
+}
+
 async function renderIssue(issue) {
 	if (issue != undefined) {
 		const browser = await puppeteer.launch();
 		const page = await browser.newPage();
-		const localPath = './rendered_PDFs';
+		// var cookie = [
+		// 	{
+		// 		"domain": "github.com/cuvar/rawr",
+		// 		"expirationDate": 1597288045,
+		// 		"hostOnly": false,
+		// 		"httpOnly": false,
+		// 		"name": "key",
+		// 		"path": "/",
+		// 		"sameSite": "no_restriction",
+		// 		"secure": false,
+		// 		"session": false,
+		// 		"storeId": "0",
+		// 		"value": "value!",
+		// 		"id": 2
+		// 	}
+		// ];
+		// await page.setCookie(...cookie);
+
+		const localPath = './rendered_Issues';
 
 		await page.goto(`https://github.com/${issue.owner}/${issue.repo}/issues/${issue.num}`, { waitUntil: 'networkidle2' });
 
 		if (!fs.existsSync(localPath)) {
 			fs.mkdirSync(localPath);
 		}
-
+		const fileName = `${localPath}/ProjektRawr_GitHubIssue_${issue.num}.pdf`;
 		await page.pdf({
-			path: `${localPath}/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf`,
+			// path: `${localPath}/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf`,
+			path: fileName,
 			format: 'letter'
 		});
 
-		process.stdout.write(`File created at [ ${localPath}/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf ]\n`);
+		process.stdout.write(`File created at [ ${fileName} ]\n`);
 
 		await browser.close();
 	}
 	else {
 
 		process.stdout.write(`\n${chalk.yellow('No issues found in')} ${chalk.cyan('[')}${chalk.cyan(issue.repo)}${chalk.cyan(']')}.\n\n`);
+
+		return;
+	}
+}
+
+async function renderPullRequest(pullRequest) {
+	if (pullRequest != undefined) {
+		const browser = await puppeteer.launch();
+		const page = await browser.newPage();
+		const localPath = './rendered_PullRequests';
+
+		await page.goto(`https://github.com/${pullRequest.owner}/${pullRequest.repo}/pull/${pullRequest.num}`, { waitUntil: 'networkidle2' });
+
+		if (!fs.existsSync(localPath)) {
+			fs.mkdirSync(localPath);
+		}
+		const fileName = `${localPath}/ProjektRawr_GitHubPullRequest_${pullRequest.num}.pdf`;
+		await page.pdf({
+			// path: `${localPath}/${pullRequest.owner}_${pullRequest.repo}_${pullRequest.created.match(regexFileDate)}_issue${pullRequest.num}.pdf`,
+			path: fileName,
+			format: 'letter'
+		});
+
+		process.stdout.write(`File created at [ ${fileName} ]\n`);
+
+		await browser.close();
+	}
+	else {
+
+		process.stdout.write(`\n${chalk.yellow('No pull requests found in')} ${chalk.cyan('[')}${chalk.cyan(pullRequest.repo)}${chalk.cyan(']')}.\n\n`);
 
 		return;
 	}
