@@ -69,12 +69,10 @@ function getAllForOrg(config) {
 							issues => {
 								if (!config.year.issueYear) {
 									queueIssuesForRender(collectedIssues, callback);
-									// queuePullRequestForRender(collectedIssues, callback);
 								}
 								else {
 									const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
 									queueIssuesForRender(datedIssues, callback);
-									// queuePullRequestForRender(collectedIssues, callback);
 								}
 							},
 							(err, res) => {
