@@ -61,26 +61,45 @@ function getAllForOrg(config) {
 				repos,
 				(repo, callback) => {
 					config.page = 1;
-
-					getIssues(
-						config,
-						repo.name,
-						[],
-						issues => {
-							if (!config.year.issueYear) {
-								queueIssuesForRender(collectedIssues, callback);
-								// queuePullRequestForRender(collectedIssues, callback);
+					if(config.issueOrPR.requestedData === 'issues') {
+						getIssues(
+							config,
+							repo.name,
+							[],
+							issues => {
+								if (!config.year.issueYear) {
+									queueIssuesForRender(collectedIssues, callback);
+									// queuePullRequestForRender(collectedIssues, callback);
+								}
+								else {
+									const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
+									queueIssuesForRender(datedIssues, callback);
+									// queuePullRequestForRender(collectedIssues, callback);
+								}
+							},
+							(err, res) => {
+								process.stdout.write(`\n${chalk.yellow('All files have finished rendering, have a nice day!')}\n\n`);
 							}
-							else {
-								const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
-								queueIssuesForRender(datedIssues, callback);
-								// queuePullRequestForRender(collectedIssues, callback);
+						);
+					} else {
+						getPullRequests(
+							config,
+							repo.name,
+							[],
+							pulls => {
+								if (!config.year.issueYear) {
+									queuePullRequestForRender(collectedIssues, callback);
+								}
+								else {
+									const datedIssues = filterIssuesByYear(pulls, config.year.issueYear, []);
+									queuePullRequestForRender(datedIssues, callback);
+								}
+							},
+							(err, res) => {
+								process.stdout.write(`\n${chalk.yellow('All files have finished rendering, have a nice day!')}\n\n`);
 							}
-						},
-						(err, res) => {
-							process.stdout.write(`\n${chalk.yellow('All files have finished rendering, have a nice day!')}\n\n`);
-						}
-					);
+						);
+					}
 				}
 			);
 		}
@@ -98,8 +117,8 @@ function getAllForUser(config) {
 				repos,
 				(repo, callback) => {
 					config.page = 1;
-					let getIssueBool = true;
-					if (getIssueBool) {
+					
+					if (config.issueOrPR.requestedData === 'issues') {
 						getIssues(
 							config,
 							repo.name,
@@ -122,17 +141,17 @@ function getAllForUser(config) {
 							config,
 							repo.name,
 							[],
-							issues => {
+							pulls => {
 								if (!config.year.issueYear) {
-									queueIssuesForRender(collectedIssues, callback);
+									queuePullRequestForRender(collectedIssues, callback);
 								}
 								else {
-									const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
-									queueIssuesForRender(datedIssues, callback);
+									const datedIssues = filterIssuesByYear(pulls, config.year.issueYear, []);
+									queuePullRequestForRender(datedIssues, callback);
 								}
 							},
 							(err, res) => {
-								return process.stdout.write(`\n${chalk.yellow('All PRs have finished rendering, have a nice day!')}\n\n`);
+								return process.stdout.write(`\n${chalk.yellow('All pull requests have finished rendering, have a nice day!')}\n\n`);
 							}
 						);
 					}
@@ -298,62 +317,92 @@ function getPullRequests(config, repo, collectedPR, callback) {
 }
 
 function getMultipleRepos(config) {
-	async.eachSeries(
-		config.multipleRepos,
-		(repo, callback) => {
-			config.page = 1;
+	if (config.issueOrPR.requestedData === 'issues') {
+		async.eachSeries(
+			config.multipleRepos,
+			(repo, callback) => {
+				config.page = 1;
 
-			getIssues(
-				config,
-				repo.name,
-				[],
-				issues => {
-					if (!config.year.issueYear) {
-						queueIssuesForRender(issues, callback);
+				getIssues(
+					config,
+					repo.name,
+					[],
+					issues => {
+						if (!config.year.issueYear) {
+							queueIssuesForRender(issues, callback);
+						}
+						else {
+							const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
+							queueIssuesForRender(datedIssues, callback);
+						}
+					},
+					(err, res) => {
+						process.stdout.write(`\n${chalk.yellow('All issues have finished rendering, have a nice day!')}\n\n`);
 					}
-					else {
-						const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
-						queueIssuesForRender(datedIssues, callback);
+				);
+			}
+		);
+	} else {
+		async.eachSeries(
+			config.multipleRepos,
+			(repo, callback) => {
+				config.page = 1;
+
+				getPullRequests(
+					config,
+					repo.name,
+					[],
+					pulls => {
+						if (!config.year.issueYear) {
+							queuePullRequestForRender(pulls, () => { });
+						}
+						else {
+							const datedIssues = filterIssuesByYear(pulls, config.year.issueYear, []);
+							queuePullRequestForRender(datedIssues, () => { });
+						}
+					},
+					(err, res) => {
+						process.stdout.write(`\n${chalk.yellow('All pull requests have finished rendering, have a nice day!')}\n\n`);
 					}
-				},
-				(err, res) => {
-					process.stdout.write(`\n${chalk.yellow('All issues have finished rendering, have a nice day!')}\n\n`);
-				}
-			);
-		}
-	);
+				);
+			}
+		);
+	}
 }
 
 function getSingleRepo(config) {
-	getIssues(
-		config,
-		config.accountInfo.repoName,
-		[],
-		issues => {
-			if (!config.year.issueYear) {
-				queueIssuesForRender(issues, () => {});
+	if (config.issueOrPR.requestedData === 'issues') {
+		getIssues(
+			config,
+			config.accountInfo.repoName,
+			[],
+			issues => {
+				if (!config.year.issueYear) {
+					queueIssuesForRender(issues, () => { });
+				}
+				else {
+					const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
+					queueIssuesForRender(datedIssues, () => { });
+				}
 			}
-			else {
-				const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
-				queueIssuesForRender(datedIssues, () => {});
-			}
-		}
-	);
+		);
 
-	getPullRequests(
-		config,
-		config.accountInfo.repoName,
-		[],
-		issues => {
-			if (!config.year.issueYear) {
-				queuePullRequestForRender(issues, () => { });
+	} else {
+		getPullRequests(
+			config,
+			config.accountInfo.repoName,
+			[],
+			issues => {
+				if (!config.year.issueYear) {
+					queuePullRequestForRender(issues, () => { });
+				}
+				else {
+					const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
+					queuePullRequestForRender(datedIssues, () => { });
+				}
 			}
-			else {
-				const datedIssues = filterIssuesByYear(issues, config.year.issueYear, []);
-				queuePullRequestForRender(datedIssues, () => { });
-			}
-		}
-	);
+		);
+	}
 }
 
 function manageGitHub(config) {
@@ -376,6 +425,7 @@ function manageGitHub(config) {
 	else {
 		getSingleRepo(config);
 	}
+
 }
 
 async function managePrompts() {
@@ -397,6 +447,7 @@ async function managePrompts() {
 		multipleRepos = await promptForRepos(null, [], []);
 	}
 
+	const issueOrPR = await promptForIssuePR();
 	const year = await promptForYear();
 
 	await manageGitHub(
@@ -405,7 +456,8 @@ async function managePrompts() {
 			multipleRepos,
 			page,
 			token,
-			year
+			year,
+			issueOrPR
 		}
 	);
 }
@@ -519,12 +571,12 @@ function promptForYear() {
 	return inq.prompt(
 		[
 			{
-				message: 'Are you searching for issues that were open during a specific year?',
+				message: 'Are you searching for issues/PRs that were open during a specific year?',
 				name: 'searchByDate',
 				type: 'confirm'
 			},
 			{
-				message: 'What year were the issues open during?',
+				message: 'What year were the issues/PRs open during?',
 				name: 'issueYear',
 				type: 'input',
 				validate: value => {
@@ -539,6 +591,19 @@ function promptForYear() {
 				when: answers => {
 					return answers.searchByDate === true;
 				}
+			}
+		]
+	);
+}
+
+function promptForIssuePR() {
+	return inq.prompt(
+		[
+			{
+				choices: ['issues', 'pull-requests'],
+				message: 'What is the data you\'re searching for?',
+				name: 'requestedData',
+				type: 'list'
 			}
 		]
 	);
@@ -586,23 +651,6 @@ async function renderIssue(issue) {
 	if (issue != undefined) {
 		const browser = await puppeteer.launch();
 		const page = await browser.newPage();
-		// var cookie = [
-		// 	{
-		// 		"domain": "github.com/cuvar/rawr",
-		// 		"expirationDate": 1597288045,
-		// 		"hostOnly": false,
-		// 		"httpOnly": false,
-		// 		"name": "key",
-		// 		"path": "/",
-		// 		"sameSite": "no_restriction",
-		// 		"secure": false,
-		// 		"session": false,
-		// 		"storeId": "0",
-		// 		"value": "value!",
-		// 		"id": 2
-		// 	}
-		// ];
-		// await page.setCookie(...cookie);
 
 		const localPath = './rendered_Issues';
 
@@ -611,9 +659,8 @@ async function renderIssue(issue) {
 		if (!fs.existsSync(localPath)) {
 			fs.mkdirSync(localPath);
 		}
-		const fileName = `${localPath}/ProjektRawr_GitHubIssue_${issue.num}.pdf`;
+		const fileName = `${localPath}/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf`;
 		await page.pdf({
-			// path: `${localPath}/${issue.owner}_${issue.repo}_${issue.created.match(regexFileDate)}_issue${issue.num}.pdf`,
 			path: fileName,
 			format: 'letter'
 		});
@@ -641,9 +688,8 @@ async function renderPullRequest(pullRequest) {
 		if (!fs.existsSync(localPath)) {
 			fs.mkdirSync(localPath);
 		}
-		const fileName = `${localPath}/ProjektRawr_GitHubPullRequest_${pullRequest.num}.pdf`;
+		const fileName = `${localPath}/${pullRequest.owner}_${pullRequest.repo}_${pullRequest.created.match(regexFileDate)}_pr${pullRequest.num}.pdf`;
 		await page.pdf({
-			// path: `${localPath}/${pullRequest.owner}_${pullRequest.repo}_${pullRequest.created.match(regexFileDate)}_issue${pullRequest.num}.pdf`,
 			path: fileName,
 			format: 'letter'
 		});
